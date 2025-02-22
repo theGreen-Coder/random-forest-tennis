@@ -35,24 +35,17 @@ class TreeNode:
         lowest_gini_threshold = -1
 
         for i in range(0, data.shape[1] - 1):
-            # print(i)
-            # print(np.unique(data[:, i]))
-
             unique_values = np.unique(data[:, i])
 
             # Calculate gini impurity
             for j in range(unique_values.shape[0]-1):
                 filter_value = (unique_values[j]+unique_values[j+1])/2
-                # print(filter_value)
             
                 left = data[data[:, i] <= filter_value]
                 right = data[data[:, i] > filter_value]
-                # print(left)
-                # print(right)
                 assert len(left) + len(right) == len(data)
 
                 total_gini_impurity = (len(left)/len(data))*self.calculate_gini(left) + (len(right)/len(data))*self.calculate_gini(right)
-                # print(total_gini_impurity)
 
                 if total_gini_impurity < lowest_gini:
                     lowest_gini = total_gini_impurity
@@ -87,17 +80,59 @@ class DecisionTree:
 
             self.tree = head
     
+    def predict(self, data):
+        assert data.shape[0] != 0
+        assert data.shape[0] != 1
+
+        results = np.full((data.shape[0], 1), -1)
+
+        for idx, sample in enumerate(data):
+            sample_d = sample
+
+            if sample.shape[0] != 1:
+                sample_d = np.expand_dims(sample_d, axis=0)
+            
+            result = self.predict_sample(sample_d)
+            results[idx] = result
+        
+        return results
+    
+    def predict_sample(self, sample):
+        assert sample.shape[0] == 1
+
+        def predict_sample_recursive(node, depth=0):
+            assert depth < self.max_depth+1
+
+            if node.val is not None:
+                return node.val
+            
+            if sample[0][node.feature] <= node.threshold:
+                return predict_sample_recursive(node.left, depth + 1)
+            else:
+                return predict_sample_recursive(node.right, depth + 1)
+        
+        return predict_sample_recursive(self.tree)
+    
+    def calculate_accuracy(self, data):
+        labels = data[:, data.shape[1]-1:]
+        samples = data[:, :data.shape[1]-1]
+
+        results = self.predict(samples)
+        
+        return np.mean(results == labels)
+
+    
     def print_tree(self):
         def print_recursive(node, depth=0):
             if node is None:
                 return
             
-            indent = "  " * depth  # Indentation for better visualization
+            indent = "  " * depth
             
-            if node.val is not None:  # Leaf node
+            if node.val is not None:
                 print(f"{indent}Leaf: {node.val}")
             
-            else:  # Decision node
+            else:
                 print(f"{indent}Feature {node.feature} < {node.threshold}")
                 print(f"{indent}Left:")
                 print_recursive(node.left, depth + 1)
