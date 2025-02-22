@@ -1,4 +1,5 @@
 import numpy as np
+import random
 
 class TreeNode:
     def __init__(self, val=None, feature=None, threshold=None, left=None, right=None):
@@ -16,7 +17,7 @@ class TreeNode:
         return 1 - (len(true_val)/len(data))**2 - (len(false_val)/len(data))**2
     
     # Requires last column to be what we're trying to predict
-    def fit(self, data, depth, max_depth, min_samples_split, last_gini, min_gini_change):
+    def fit(self, data, depth, max_depth, min_samples_split, last_gini, min_gini_change, n_features):
         count_true = len(data[data[:, data.shape[1]-1] == 1])
         count_false = len(data[data[:, data.shape[1]-1] == 0])
 
@@ -31,27 +32,46 @@ class TreeNode:
         lowest_gini_feature = -1
         lowest_gini_threshold = -1
 
-        for i in range(0, data.shape[1] - 1):
-            unique_values = np.unique(data[:, i])
+        # Randomly selecting features (application in Random Forest)
+        flag_features = False
+        loop_features = data.shape[1] - 1
+        indices = set(range(data.shape[1]-1))
+        idx = 0
+
+        if n_features < data.shape[1] - 1:
+            flag_features = True
+            loop_features = n_features
+        
+
+        for k in range(0, loop_features):
+            if flag_features:
+                random_idx = random.choice(tuple(indices))
+                indices.remove(random_idx)
+                idx = random_idx
+            else:
+                idx = k
+            
+            unique_values = np.unique(data[:, idx])
 
             # Calculate gini impurity
             for j in range(unique_values.shape[0]-1):
                 filter_value = (unique_values[j]+unique_values[j+1])/2
             
-                left = data[data[:, i] <= filter_value]
-                right = data[data[:, i] > filter_value]
+                left = data[data[:, idx] <= filter_value]
+                right = data[data[:, idx] > filter_value]
                 assert len(left) + len(right) == len(data)
 
                 total_gini_impurity = (len(left)/len(data))*self.calculate_gini(left) + (len(right)/len(data))*self.calculate_gini(right)
 
                 if total_gini_impurity < lowest_gini:
                     lowest_gini = total_gini_impurity
-                    lowest_gini_feature = i
+                    lowest_gini_feature = idx
                     lowest_gini_threshold = filter_value
         
         left = data[data[:, lowest_gini_feature] < lowest_gini_threshold]
         right = data[data[:, lowest_gini_feature] >= lowest_gini_threshold]
 
+        # Regularization on min_gini_change
         if abs(lowest_gini-last_gini) < min_gini_change:
             if count_true >= count_false:
                 self.val = 1
@@ -63,31 +83,52 @@ class TreeNode:
         self.feature = lowest_gini_feature
         self.threshold = lowest_gini_threshold
 
-        self.left = TreeNode().fit(data=left, depth=depth+1, max_depth=max_depth, min_samples_split=min_samples_split, last_gini=lowest_gini, min_gini_change=min_gini_change)
-        self.right = TreeNode().fit(data=right, depth=depth+1, max_depth=max_depth, min_samples_split=min_samples_split, last_gini=lowest_gini, min_gini_change=min_gini_change)
+        self.left = TreeNode().fit(data=left, depth=depth+1, max_depth=max_depth, 
+                                   min_samples_split=min_samples_split, last_gini=lowest_gini, 
+                                   min_gini_change=min_gini_change, n_features=n_features)
+        self.right = TreeNode().fit(data=right, depth=depth+1, max_depth=max_depth, 
+                                    min_samples_split=min_samples_split, last_gini=lowest_gini, 
+                                    min_gini_change=min_gini_change, n_features=n_features)
 
         return self
 
 class DecisionTree:
-    def __init__(self, tree=None, max_depth=float("inf"), min_samples_split=0, min_gini_change=-1):
+    def __init__(self, tree=None, max_depth=float("inf"), min_samples_split=0, min_gini_change=-1, bagging=False):
         self.tree = tree
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
         self.min_gini_change = min_gini_change
+        self.bagging = bagging
+    
+    def perform_bagging(self, data):
+        new_data = np.empty(data.shape, dtype=object)
 
-    def build_tree(self, data):
+        for i in range(new_data.shape[0]):
+            random_row = data[np.random.randint(data.shape[0])]
+            new_data[i] = random_row
+        
+        assert new_data.shape == data.shape
+        return new_data
+
+    def build_tree(self, data, n_features=float("inf")):
         if self.tree is not None:
             raise Exception("Error in building decision tree. Tree is not None.")
         
         else:
+            if self.bagging:
+                final_data = self.perform_bagging(data)
+            else:
+                final_data = data
+            
             head = TreeNode()
             head = head.fit(
-                data=data, 
+                data=final_data,
                 depth=0, 
                 max_depth=self.max_depth, 
                 min_samples_split=self.min_samples_split,
                 min_gini_change=self.min_gini_change,
-                last_gini=1
+                last_gini=1,
+                n_features = n_features
             )
 
             self.tree = head
