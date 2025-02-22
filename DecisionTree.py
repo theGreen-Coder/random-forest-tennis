@@ -16,19 +16,16 @@ class TreeNode:
         return 1 - (len(true_val)/len(data))**2 - (len(false_val)/len(data))**2
     
     # Requires last column to be what we're trying to predict
-    def fit(self, data, depth, max_depth):
+    def fit(self, data, depth, max_depth, min_samples_split, last_gini, min_gini_change):
         count_true = len(data[data[:, data.shape[1]-1] == 1])
         count_false = len(data[data[:, data.shape[1]-1] == 0])
 
-        if depth >= max_depth or count_true == 0 or count_false == 0:
+        if depth >= max_depth or count_true == 0 or count_false == 0 or data.shape[0] < min_samples_split:
             if count_true >= count_false:
                 self.val = 1
             else:
                 self.val = 0
-            
             return self
-
-        self.data = data
 
         lowest_gini = float("inf")
         lowest_gini_feature = -1
@@ -54,21 +51,29 @@ class TreeNode:
         
         left = data[data[:, lowest_gini_feature] < lowest_gini_threshold]
         right = data[data[:, lowest_gini_feature] >= lowest_gini_threshold]
-        
+
+        if abs(lowest_gini-last_gini) < min_gini_change:
+            if count_true >= count_false:
+                self.val = 1
+            else:
+                self.val = 0
+            return self
+
+        self.data = data
         self.feature = lowest_gini_feature
         self.threshold = lowest_gini_threshold
 
-        self.left = TreeNode().fit(data=left, depth=depth+1, max_depth=max_depth)
-        self.right = TreeNode().fit(data=right, depth=depth+1, max_depth=max_depth)
+        self.left = TreeNode().fit(data=left, depth=depth+1, max_depth=max_depth, min_samples_split=min_samples_split, last_gini=lowest_gini, min_gini_change=min_gini_change)
+        self.right = TreeNode().fit(data=right, depth=depth+1, max_depth=max_depth, min_samples_split=min_samples_split, last_gini=lowest_gini, min_gini_change=min_gini_change)
 
         return self
 
 class DecisionTree:
-    def __init__(self, tree=None, max_depth=float("inf"), min_samples_split=2, min_samples_leaf=1):
+    def __init__(self, tree=None, max_depth=float("inf"), min_samples_split=0, min_gini_change=-1):
         self.tree = tree
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
-        self.min_samples_leaf = min_samples_leaf
+        self.min_gini_change = min_gini_change
 
     def build_tree(self, data):
         if self.tree is not None:
@@ -76,7 +81,14 @@ class DecisionTree:
         
         else:
             head = TreeNode()
-            head = head.fit(data=data, depth=0, max_depth=self.max_depth)
+            head = head.fit(
+                data=data, 
+                depth=0, 
+                max_depth=self.max_depth, 
+                min_samples_split=self.min_samples_split,
+                min_gini_change=self.min_gini_change,
+                last_gini=1
+            )
 
             self.tree = head
     
