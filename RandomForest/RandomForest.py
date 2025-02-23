@@ -15,7 +15,28 @@ class RandomForest:
 
             self.estimators.append(new_tree)
 
-    # def predict(self, data):
-    #     count
+    def predict(self, data, print_predictions=False):
+        for idx, forest in enumerate(self.estimators):
+            prediction = forest.predict(data)
 
-       
+            if idx == 0:
+                results = prediction
+            else:
+                results = np.append(results, prediction, axis=1)
+        
+        output_array = np.apply_along_axis(lambda col: np.bincount(col).argmax(), axis=1, arr=results)
+        output_array = output_array.reshape(-1, 1)
+
+        if print_predictions:
+            print(results)
+
+        return output_array
+
+    # I know this function is already defined
+    def calculate_accuracy(self, data):
+        labels = data[:, data.shape[1]-1:]
+        samples = data[:, :data.shape[1]-1]
+
+        results = self.predict(samples)
+        
+        return np.mean(results == labels)
